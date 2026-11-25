@@ -1,0 +1,31 @@
+# titel: Text in der Titelleiste
+# variable: Name der Benutzervariable
+# spalten: Buttons nebeneinander, danach beginnt eine neue Zeile
+# darkmode: true für dunkle Farben, false oder weglassen für hell
+titel: Arbeitsplatz festlegen
+darkmode: false
+variable: IGELNAME
+spalten: 5
+gruppen:
+  - name: Labor
+    buttons:
+      - anzeigename: Labb2platz
+        wert: Igel1
+      - anzeigename: Labaplatz
+        wert: Igel22
+  - name: Büro
+    buttons:
+      - anzeigename: Eintrag 2
+        wert: Igel05
+      - anzeigename: Eintrag 3
+        wert: Igel6
+      - anzeigename: Eintrag 4
+        wert: Igel7
+      - anzeigename: Eintrag 2
+        wert: Igel8
+      - anzeigename: Eintrag 3
+        wert: Igel9
+      - anzeigename: Eintrag 2
+        wert: Igel10
+      - anzeigename: Eintrag 3
+        wert: Igel11
