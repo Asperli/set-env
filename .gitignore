@@ -1,0 +1,4 @@
+# Lokaler Build. Nach dem Klonen mit go build erzeugen.
+*.exe
+*.test
+*.out

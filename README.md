@@ -4,6 +4,24 @@ Kleines Fenster, mit dem ein Arbeitsplatz gewählt wird. Ein Klick schreibt den 
 
 Der Fenstertitel kommt aus der Konfiguration. Der gewählte Arbeitsplatz ist grün, die übrigen Buttons sind grau.
 
+Das Programm läuft unter Windows.
+
+## Nach dem Klonen
+
+Zum Bauen wird [Go](https://go.dev/dl/) gebraucht, Version 1.27.4 oder neuer. Ein C-Compiler ist nicht nötig. Die Datei `rsrc_windows_amd64.syso` bleibt im Ordner. Go bindet sie beim Build ein, damit das Fenster die Windows-Darstellung und die DPI-Einstellung übernimmt.
+
+```text
+git clone https://github.com/Asperli/set-env.git
+cd set-env
+go build -ldflags="-H windowsgui" -o Set-Env.exe .
+```
+
+`-H windowsgui` verhindert, dass zusätzlich ein Konsolenfenster aufgeht. `Set-Env.exe` entsteht lokal und liegt nicht im Repository.
+
+`set-env.config.yaml` liegt schon neben dem Quellcode. Die exe und diese Datei müssen im selben Ordner bleiben. Danach die exe per Doppelklick starten.
+
+Eine geänderte Konfiguration braucht keinen neuen Build. Nur das Fenster neu öffnen. Ein neuer Build ist nötig, wenn sich der Go-Code geändert hat.
+
 ## Start
 
 `Set-Env.exe` und `set-env.config.yaml` liegen im selben Ordner. Die exe per Doppelklick starten.
@@ -73,15 +91,3 @@ ausgeblendet:
 Die Datei wird vom Programm geschrieben. Sie muss nicht von Hand angelegt werden. Wird sie gelöscht, sind beim nächsten Start wieder alle Gruppen sichtbar.
 
 Ausser dieser Datei legt das Programm nichts ab. Es gibt keinen Grafikzwischenspeicher und keinen weiteren Ordner.
-
-## Neu bauen
-
-Nur nötig, wenn sich der Go-Code geändert hat. Eine geänderte `set-env.config.yaml` braucht keinen neuen Build. Ein C-Compiler ist dafür nicht nötig.
-
-Im Projektordner:
-
-```text
-go build -ldflags="-H windowsgui" -o Set-Env.exe .
-```
-
-`-H windowsgui` verhindert, dass zusätzlich ein Konsolenfenster aufgeht.
