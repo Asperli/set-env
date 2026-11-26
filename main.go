@@ -4,7 +4,10 @@ import (
 	"runtime"
 )
 
-const defaultWindowTitle = "Arbeitsplatz festlegen"
+const (
+	defaultWindowTitle = "Arbeitsplatz festlegen"
+	defaultClearLabel  = "Notebook/Workstation"
+)
 
 func main() {
 	runtime.LockOSThread()
@@ -19,7 +22,7 @@ func main() {
 		showStartupError(defaultWindowTitle, err)
 		return
 	}
-	current, err := getUserEnv(cfg.Variable)
+	current, envExists, err := readUserEnv(cfg.Variable)
 	if err != nil {
 		showStartupError(cfg.Title, err)
 		return
@@ -30,5 +33,5 @@ func main() {
 		return
 	}
 	hidden, settingsErr := loadUserSettings(settingsPath)
-	runWindow(cfg, current, settingsPath, hidden, settingsErr)
+	runWindow(cfg, current, envExists, settingsPath, hidden, settingsErr)
 }

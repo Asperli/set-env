@@ -30,11 +30,14 @@ func TestLoadConfigFromProjectFile(t *testing.T) {
 	if cfg.Groups[1].Name != "Büro" || len(cfg.Groups[1].Buttons) == 0 {
 		t.Fatalf("buero = %+v", cfg.Groups[1])
 	}
-	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "PowerShell_ISE.exe" || cfg.Process.StartIfMissing {
+	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "PowerShell_ISE.exe" || !cfg.Process.StartIfMissing {
 		t.Fatalf("process = %+v", cfg.Process)
 	}
-	if cfg.Process.CommandLine != `C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe` {
+	if cfg.Process.CommandLine != `C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe c:\temp\env.ps1` {
 		t.Fatalf("command = %q", cfg.Process.CommandLine)
+	}
+	if cfg.ClearLabel != "Notebook/Workstation" {
+		t.Fatalf("clear = %q", cfg.ClearLabel)
 	}
 }
 
@@ -150,6 +153,33 @@ func TestColumnsFromConfig(t *testing.T) {
 	}
 	if buttonRows(7, cfg.Columns) != 3 {
 		t.Fatalf("rows = %d", buttonRows(7, cfg.Columns))
+	}
+}
+
+func TestClearLabelFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "set-env.config.yaml")
+	content := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\nfatclient: Mobil\n")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ClearLabel != "Mobil" {
+		t.Fatalf("clear = %q", cfg.ClearLabel)
+	}
+
+	if err := os.WriteFile(path, []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ClearLabel != defaultClearLabel {
+		t.Fatalf("default = %q", cfg.ClearLabel)
 	}
 }
 

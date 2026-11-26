@@ -71,6 +71,16 @@ buttons:
 
 Nach einer Änderung an der Konfiguration das Fenster neu öffnen.
 
+## Variable löschen
+
+Oben liegt ein flacher Button über die ganze Breite. Ein Klick entfernt die Benutzervariable vollständig. Das gilt als Arbeitsplatzwechsel: eine konfigurierte Applikation wird beendet oder neu gestartet, wenn vorher ein Wert gesetzt war. Ist die Variable nicht vorhanden, ist dieser Button grün. Die Arbeitsplatz-Buttons sind dann grau.
+
+Der Text steht in `fatclient`. Ohne Angabe heißt der Button `Notebook/Workstation`.
+
+```yaml
+fatclient: Notebook/Workstation
+```
+
 ## Applikation beim Wechsel
 
 Beim Wechsel des Arbeitsplatzes kann eine Applikation hart beendet oder neu gestartet werden. Die Einstellung gilt für alle Arbeitsplätze. Ein erneuter Klick auf den schon gewählten Wert löst sie nicht aus.

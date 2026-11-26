@@ -93,6 +93,36 @@ func TestRestartSkipsWhenNotRunning(t *testing.T) {
 	}
 }
 
+func TestEnvironmentBlockOmitsClearedVariable(t *testing.T) {
+	t.Setenv("SET_ENV_CLEAR_PROBE", "alt")
+	cleared, err := environmentBlock("SET_ENV_CLEAR_PROBE", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(envBlockText(cleared), "SET_ENV_CLEAR_PROBE=") {
+		t.Fatal("cleared variable is still present")
+	}
+	restored, err := environmentBlock("SET_ENV_CLEAR_PROBE", "Igel1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(envBlockText(restored), "SET_ENV_CLEAR_PROBE=Igel1") {
+		t.Fatal("new value missing")
+	}
+}
+
+func envBlockText(block []uint16) string {
+	var b strings.Builder
+	for _, value := range block {
+		if value == 0 {
+			b.WriteByte('\n')
+			continue
+		}
+		b.WriteRune(rune(value))
+	}
+	return b.String()
+}
+
 func TestFirstCommandToken(t *testing.T) {
 	if got := firstCommandToken(`"C:\Program Files\App\App.exe" /reset`); got != `C:\Program Files\App\App.exe` {
 		t.Fatalf("quoted = %q", got)

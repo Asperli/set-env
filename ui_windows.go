@@ -167,6 +167,7 @@ type windowState struct {
 	hwnd         uintptr
 	cfg          appConfig
 	current      string
+	envExists    bool
 	settingsPath string
 	hidden       map[string]bool
 	dpi          int
@@ -193,7 +194,7 @@ func showError(owner uintptr, title, text string) {
 	procMessageBox.Call(owner, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), 0x00000010|0x00010000)
 }
 
-func runWindow(cfg appConfig, current, settingsPath string, hidden map[string]bool, settingsErr error) {
+func runWindow(cfg appConfig, current string, envExists bool, settingsPath string, hidden map[string]bool, settingsErr error) {
 	if hidden == nil {
 		hidden = map[string]bool{}
 	}
@@ -203,6 +204,7 @@ func runWindow(cfg appConfig, current, settingsPath string, hidden map[string]bo
 	state := &windowState{
 		cfg:          cfg,
 		current:      current,
+		envExists:    envExists,
 		settingsPath: settingsPath,
 		hidden:       hidden,
 		dpi:          systemDPI(),
@@ -380,6 +382,15 @@ func (s *windowState) controlSpecs() []control {
 	id := 100
 	specs := make([]control, 0)
 
+	clearH := s.px(32)
+	specs = append(specs, control{
+		id: id, kind: "clear", text: s.cfg.ClearLabel,
+		x: margin, y: y, w: s.contentW - margin*2, h: clearH,
+		selected: !s.envExists,
+	})
+	id++
+	y += clearH + gap
+
 	if s.cfg.hasNamedGroups() {
 		width, height := s.px(150), s.px(30)
 		specs = append(specs, control{
@@ -419,7 +430,7 @@ func (s *windowState) controlSpecs() []control {
 				x: margin + column*(bw+gap),
 				y: y + row*(bh+gap),
 				w: bw, h: bh,
-				selected: s.current != "" && button.Wert == s.current,
+				selected: s.envExists && button.Wert == s.current,
 			})
 			id++
 		}
@@ -438,7 +449,7 @@ func (s *windowState) controlSpecs() []control {
 }
 
 func (s *windowState) maxClientHeight() int {
-	maxH := s.px(80) + 4*(s.px(68)+s.px(8))
+	maxH := s.px(80) + s.px(32) + s.px(8) + 4*(s.px(68)+s.px(8))
 	area := workArea()
 	available := int(area.Bottom-area.Top) - s.px(80)
 	if available > s.px(120) && maxH > available {
@@ -512,7 +523,7 @@ func (s *windowState) createControls() {
 		case "showall":
 		case "check":
 			style |= bsAutoCheckBox
-		case "button":
+		case "button", "clear":
 			style |= bsOwnerDraw
 		default:
 			className = "Static"
@@ -543,7 +554,7 @@ func (s *windowState) createControls() {
 			empty, _ := windows.UTF16PtrFromString("")
 			procSetWindowTheme.Call(item.hwnd, uintptr(unsafe.Pointer(empty)), uintptr(unsafe.Pointer(empty)))
 		}
-		if item.kind == "button" {
+		if item.kind == "button" || item.kind == "clear" {
 			previous, _, _ := procSetWindowLongPtr.Call(item.hwnd, ^uintptr(3), buttonProc)
 			if origButtonProc == 0 {
 				origButtonProc = previous
@@ -607,24 +618,34 @@ func (s *windowState) onCommand(wParam uintptr) {
 	}
 	switch item.kind {
 	case "button":
-		changed := item.value != s.current
+		changed := !s.envExists || item.value != s.current
 		if err := setUserEnv(s.cfg.Variable, item.value); err != nil {
 			showError(s.hwnd, s.cfg.Title, err.Error())
 			return
 		}
 		s.current = item.value
-		for i := range s.controls {
-			if s.controls[i].kind != "button" {
-				continue
-			}
-			s.controls[i].selected = s.controls[i].value == item.value
-			procInvalidateRect.Call(s.controls[i].hwnd, 0, 1)
-		}
+		s.envExists = true
+		s.refreshSelection()
 		if !changed {
 			return
 		}
 		if err := applyProcessAction(s.cfg, item.value); err != nil {
 			showError(s.hwnd, s.cfg.Title, "Der Arbeitsplatz wurde gesetzt.\n\n"+err.Error())
+		}
+	case "clear":
+		changed := s.envExists
+		if err := clearUserEnv(s.cfg.Variable); err != nil {
+			showError(s.hwnd, s.cfg.Title, err.Error())
+			return
+		}
+		s.current = ""
+		s.envExists = false
+		s.refreshSelection()
+		if !changed {
+			return
+		}
+		if err := applyProcessAction(s.cfg, ""); err != nil {
+			showError(s.hwnd, s.cfg.Title, "Die Variable wurde gelöscht.\n\n"+err.Error())
 		}
 	case "check":
 		s.hidden[item.group] = true
@@ -644,6 +665,20 @@ func (s *windowState) onCommand(wParam uintptr) {
 			return
 		}
 		procPostMessage.Call(s.hwnd, wmRebuild, 0, 0)
+	}
+}
+
+func (s *windowState) refreshSelection() {
+	for i := range s.controls {
+		switch s.controls[i].kind {
+		case "button":
+			s.controls[i].selected = s.envExists && s.controls[i].value == s.current
+		case "clear":
+			s.controls[i].selected = !s.envExists
+		default:
+			continue
+		}
+		procInvalidateRect.Call(s.controls[i].hwnd, 0, 1)
 	}
 }
 

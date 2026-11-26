@@ -25,6 +25,16 @@ func TestSetUserEnvRoundTrip(t *testing.T) {
 	if stored != "PROBE-1" {
 		t.Fatalf("stored %q", stored)
 	}
+	if err := clearUserEnv(name); err != nil {
+		t.Fatal(err)
+	}
+	_, exists, err := readUserEnv(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("variable still exists")
+	}
 }
 
 func restoreUserEnv(name, previous string) error {

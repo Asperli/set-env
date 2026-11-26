@@ -6,14 +6,16 @@
 # applikation.name: Exe-Dateiname, z.B. Client.exe
 # applikation.startbefehl: Kommandozeile für den Neustart
 # applikation.starten: true startet auch, wenn das Programm nicht läuft
+# fatclient: Text des Buttons, der die Variable entfernt
 titel: Arbeitsplatz festlegen
 darkmode: false
 variable: IGELNAME
 spalten: 5
+fatclient: Notebook/Workstation
 applikation:
   aktion: restart
   name: PowerShell_ISE.exe
-  startbefehl: 'C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe'
+  startbefehl: 'C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe c:\temp\env.ps1'
   starten: true
 gruppen:
   - name: Labor

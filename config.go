@@ -39,12 +39,13 @@ type processAction struct {
 }
 
 type appConfig struct {
-	Title    string
-	Variable string
-	Columns  int
-	Dark     bool
-	Groups   []groupDef
-	Process  processAction
+	Title      string
+	Variable   string
+	Columns    int
+	Dark       bool
+	Groups     []groupDef
+	Process    processAction
+	ClearLabel string
 }
 
 func (c appConfig) hasNamedGroups() bool {
@@ -74,6 +75,8 @@ type rawConfig struct {
 	Groups        []rawGroup   `yaml:"groups"`
 	Applikation   rawAppAction `yaml:"applikation"`
 	Application   rawAppAction `yaml:"application"`
+	Fatclient     string       `yaml:"fatclient"`
+	Clear         string       `yaml:"clear"`
 }
 
 type rawAppAction struct {
@@ -177,7 +180,25 @@ func loadConfig(path string) (appConfig, error) {
 	if err != nil {
 		return appConfig{}, err
 	}
-	return appConfig{Title: title, Variable: variable, Columns: columns, Dark: raw.DarkMode, Groups: groups, Process: process}, nil
+	clearLabel, err := clearLabelFromRaw(raw)
+	if err != nil {
+		return appConfig{}, err
+	}
+	return appConfig{Title: title, Variable: variable, Columns: columns, Dark: raw.DarkMode, Groups: groups, Process: process, ClearLabel: clearLabel}, nil
+}
+
+func clearLabelFromRaw(raw rawConfig) (string, error) {
+	label := firstText(raw.Fatclient, raw.Clear)
+	if label == "" {
+		return defaultClearLabel, nil
+	}
+	if strings.ContainsAny(label, "\r\n\x00") {
+		return "", fmt.Errorf("der Text zum Löschen darf keine Zeilenumbrüche enthalten")
+	}
+	if len(label) > 120 {
+		return "", fmt.Errorf("der Text zum Löschen ist länger als 120 Zeichen")
+	}
+	return label, nil
 }
 
 func titleFromRaw(raw rawConfig) (string, error) {

@@ -10,20 +10,25 @@ import (
 )
 
 func getUserEnv(name string) (string, error) {
+	value, _, err := readUserEnv(name)
+	return value, err
+}
+
+func readUserEnv(name string) (string, bool, error) {
 	key, err := registry.OpenKey(registry.CURRENT_USER, `Environment`, registry.QUERY_VALUE)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer key.Close()
 
 	value, _, err := key.GetStringValue(name)
 	if err == registry.ErrNotExist {
-		return "", nil
+		return "", false, nil
 	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return value, nil
+	return value, true, nil
 }
 
 func setUserEnv(name, value string) error {
@@ -50,6 +55,27 @@ func setUserEnv(name, value string) error {
 		return fmt.Errorf("die Variable wurde nicht gespeichert. Erwartet %q, gelesen %q", value, stored)
 	}
 
+	broadcastEnvironmentChange()
+	return nil
+}
+
+func clearUserEnv(name string) error {
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Environment`, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("die Benutzervariable %s konnte nicht geöffnet werden: %w", name, err)
+	}
+	defer key.Close()
+	err = key.DeleteValue(name)
+	if err != nil && err != registry.ErrNotExist {
+		return fmt.Errorf("die Benutzervariable %s konnte nicht gelöscht werden: %w", name, err)
+	}
+	_, exists, readErr := readUserEnv(name)
+	if readErr != nil {
+		return readErr
+	}
+	if exists {
+		return fmt.Errorf("die Variable %s ist noch vorhanden", name)
+	}
 	broadcastEnvironmentChange()
 	return nil
 }

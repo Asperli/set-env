@@ -148,13 +148,15 @@ func environmentBlock(variable, value string) ([]uint16, error) {
 	for _, entry := range os.Environ() {
 		name, _, ok := strings.Cut(entry, "=")
 		if ok && strings.EqualFold(name, variable) {
-			lines = append(lines, variable+"="+value)
-			replaced = true
+			if value != "" {
+				lines = append(lines, variable+"="+value)
+				replaced = true
+			}
 			continue
 		}
 		lines = append(lines, entry)
 	}
-	if !replaced {
+	if !replaced && value != "" {
 		lines = append(lines, variable+"="+value)
 	}
 
