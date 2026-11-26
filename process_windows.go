@@ -18,25 +18,41 @@ const (
 
 func applyProcessAction(cfg appConfig, value string) error {
 	action := cfg.Process
-	if action.Kind == processNone {
+	if action.Kind == processNone && !action.StartIfMissing {
 		return nil
 	}
 
-	ids, err := processIDsByName(action.Executable)
-	if err != nil {
-		return fmt.Errorf("die laufenden Programme konnten nicht gelesen werden:\n%s", err)
-	}
-
 	var problems []string
-	for _, pid := range ids {
-		if err := terminateProcess(pid); err != nil {
-			problems = append(problems, fmt.Sprintf("%s (PID %d) konnte nicht beendet werden: %s", action.Executable, pid, err))
+	if action.Kind == processKill || action.Kind == processRestart {
+		for _, name := range action.Executables {
+			ids, err := processIDsByName(name)
+			if err != nil {
+				return fmt.Errorf("die laufenden Programme konnten nicht gelesen werden:\n%s", err)
+			}
+			for _, pid := range ids {
+				if err := terminateProcess(pid); err != nil {
+					problems = append(problems, fmt.Sprintf("%s (PID %d) konnte nicht beendet werden: %s", name, pid, err))
+				}
+			}
 		}
 	}
 
-	shouldStart := action.Kind == processRestart && (len(ids) > 0 || action.StartIfMissing)
+	shouldStart := false
+	if action.StartIfMissing {
+		blocked := false
+		if action.Inhibit != "" {
+			running, err := processIDsByName(action.Inhibit)
+			if err != nil {
+				return fmt.Errorf("die laufenden Programme konnten nicht gelesen werden:\n%s", err)
+			}
+			blocked = len(running) > 0
+		}
+		shouldStart = !blocked
+	} else if action.Kind == processRestart {
+		shouldStart = true
+	}
 	if shouldStart {
-		if err := startCommand(action.CommandLine, cfg.Variable, value); err != nil {
+		if err := startCommand(action.CommandLine, action.WorkingDirectory, cfg.Variable, value); err != nil {
 			problems = append(problems, err.Error())
 		}
 	}
@@ -110,7 +126,7 @@ func isProcessGone(err error) bool {
 	return errors.Is(err, windows.ERROR_INVALID_PARAMETER) || errors.Is(err, windows.ERROR_INVALID_HANDLE)
 }
 
-func startCommand(commandLine, variable, value string) error {
+func startCommand(commandLine, workDir, variable, value string) error {
 	command, err := windows.UTF16FromString(commandLine)
 	if err != nil {
 		return fmt.Errorf("der Startbefehl konnte nicht gelesen werden:\n%s", err)
@@ -120,9 +136,17 @@ func startCommand(commandLine, variable, value string) error {
 		return err
 	}
 
+	dir := workDir
+	if dir == "" {
+		dir = commandWorkingDirectory(commandLine)
+	}
 	var cwd []uint16
 	var cwdPtr *uint16
-	if dir := commandWorkingDirectory(commandLine); dir != "" {
+	if dir != "" {
+		info, statErr := os.Stat(dir)
+		if statErr != nil || !info.IsDir() {
+			return fmt.Errorf("das Arbeitsverzeichnis wurde nicht gefunden:\n%s", dir)
+		}
 		cwd, err = windows.UTF16FromString(dir)
 		if err != nil {
 			return fmt.Errorf("das Arbeitsverzeichnis konnte nicht gelesen werden:\n%s", err)

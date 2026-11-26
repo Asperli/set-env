@@ -32,10 +32,12 @@ const (
 )
 
 type processAction struct {
-	Kind           processKind
-	Executable     string
-	CommandLine    string
-	StartIfMissing bool
+	Kind             processKind
+	Executables      []string
+	CommandLine      string
+	WorkingDirectory string
+	StartIfMissing   bool
+	Inhibit          string
 }
 
 type appConfig struct {
@@ -80,18 +82,23 @@ type rawConfig struct {
 }
 
 type rawAppAction struct {
-	Aktion      string `yaml:"aktion"`
-	Action      string `yaml:"action"`
-	Name        string `yaml:"name"`
-	Programm    string `yaml:"programm"`
-	Program     string `yaml:"program"`
-	Executable  string `yaml:"executable"`
-	Startbefehl string `yaml:"startbefehl"`
-	Kommando    string `yaml:"kommando"`
-	Command     string `yaml:"command"`
-	CommandLine string `yaml:"commandline"`
-	Starten     *bool  `yaml:"starten"`
-	StartIfMiss *bool  `yaml:"startifmissing"`
+	Aktion             string   `yaml:"aktion"`
+	Action             string   `yaml:"action"`
+	Name               nameList `yaml:"name"`
+	Programm           nameList `yaml:"programm"`
+	Program            nameList `yaml:"program"`
+	Executable         nameList `yaml:"executable"`
+	Startbefehl        string   `yaml:"startbefehl"`
+	Kommando           string   `yaml:"kommando"`
+	Command            string   `yaml:"command"`
+	CommandLine        string   `yaml:"commandline"`
+	Arbeitsverzeichnis string   `yaml:"arbeitsverzeichnis"`
+	WorkDir            string   `yaml:"workdir"`
+	WorkingDirectory   string   `yaml:"workingdirectory"`
+	Starten            *bool    `yaml:"starten"`
+	StartIfMiss        *bool    `yaml:"startifmissing"`
+	Inhibit            string   `yaml:"inhibit"`
+	InhibitStart       string   `yaml:"inhibitstart"`
 }
 
 type rawGroup struct {
@@ -320,18 +327,27 @@ func processFromRaw(raw rawConfig) (processAction, error) {
 	if err != nil {
 		return processAction{}, err
 	}
-	if kind == processNone {
+	startIfMissing := false
+	if chosen.Starten != nil {
+		startIfMissing = *chosen.Starten
+	} else if chosen.StartIfMiss != nil {
+		startIfMissing = *chosen.StartIfMiss
+	}
+	if kind == processNone && !startIfMissing {
 		return processAction{}, nil
 	}
 
-	executable, err := executableName(firstText(chosen.Name, chosen.Programm, chosen.Program, chosen.Executable))
-	if err != nil {
-		return processAction{}, err
+	var executables []string
+	if kind == processKill || kind == processRestart {
+		executables, err = executableNames(firstNameList(chosen.Name, chosen.Programm, chosen.Program, chosen.Executable))
+		if err != nil {
+			return processAction{}, err
+		}
 	}
 	command := firstText(chosen.Startbefehl, chosen.Kommando, chosen.Command, chosen.CommandLine)
-	if kind == processRestart {
+	if kind == processRestart || startIfMissing {
 		if command == "" {
-			return processAction{}, fmt.Errorf("für einen Neustart fehlt der Startbefehl")
+			return processAction{}, fmt.Errorf("für einen Start fehlt der Startbefehl")
 		}
 		if strings.ContainsAny(command, "\r\n\x00") {
 			return processAction{}, fmt.Errorf("der Startbefehl darf keine Zeilenumbrüche enthalten")
@@ -340,18 +356,95 @@ func processFromRaw(raw rawConfig) (processAction, error) {
 			return processAction{}, fmt.Errorf("der Startbefehl ist länger als 32767 Zeichen")
 		}
 	}
-
-	startIfMissing := false
-	if chosen.Starten != nil {
-		startIfMissing = *chosen.Starten
-	} else if chosen.StartIfMiss != nil {
-		startIfMissing = *chosen.StartIfMiss
+	workDir := ""
+	if kind == processRestart || startIfMissing {
+		var err error
+		workDir, err = workingDirectory(firstText(chosen.Arbeitsverzeichnis, chosen.WorkDir, chosen.WorkingDirectory))
+		if err != nil {
+			return processAction{}, err
+		}
 	}
-	return processAction{Kind: kind, Executable: executable, CommandLine: command, StartIfMissing: startIfMissing}, nil
+	inhibit := ""
+	if text := firstText(chosen.Inhibit, chosen.InhibitStart); text != "" {
+		name, err := executableName(text)
+		if err != nil {
+			return processAction{}, err
+		}
+		inhibit = name
+	}
+	return processAction{Kind: kind, Executables: executables, CommandLine: command, WorkingDirectory: workDir, StartIfMissing: startIfMissing, Inhibit: inhibit}, nil
+}
+
+func workingDirectory(value string) (string, error) {
+	value = strings.Trim(strings.TrimSpace(value), `"`)
+	if value == "" {
+		return "", nil
+	}
+	if strings.ContainsAny(value, "\r\n\x00") {
+		return "", fmt.Errorf("das Arbeitsverzeichnis darf keine Zeilenumbrüche enthalten")
+	}
+	if !filepath.IsAbs(value) {
+		return "", fmt.Errorf("das Arbeitsverzeichnis %q muss ein vollständiger Pfad sein", value)
+	}
+	return filepath.Clean(value), nil
 }
 
 func rawAppActionEmpty(raw rawAppAction) bool {
-	return firstText(raw.Aktion, raw.Action, raw.Name, raw.Programm, raw.Program, raw.Executable, raw.Startbefehl, raw.Kommando, raw.Command, raw.CommandLine) == "" && raw.Starten == nil && raw.StartIfMiss == nil
+	return len(firstNameList(raw.Name, raw.Programm, raw.Program, raw.Executable)) == 0 && firstText(raw.Aktion, raw.Action, raw.Startbefehl, raw.Kommando, raw.Command, raw.CommandLine, raw.Arbeitsverzeichnis, raw.WorkDir, raw.WorkingDirectory, raw.Inhibit, raw.InhibitStart) == "" && raw.Starten == nil && raw.StartIfMiss == nil
+}
+
+type nameList []string
+
+func (n *nameList) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var text string
+		if err := value.Decode(&text); err != nil {
+			return err
+		}
+		if strings.TrimSpace(text) != "" {
+			*n = []string{text}
+		}
+	case yaml.SequenceNode:
+		var list []string
+		if err := value.Decode(&list); err != nil {
+			return err
+		}
+		*n = list
+	default:
+		return fmt.Errorf("der Programmname muss ein Text oder eine Liste sein")
+	}
+	return nil
+}
+
+func firstNameList(lists ...nameList) nameList {
+	for _, list := range lists {
+		if len(list) > 0 {
+			return list
+		}
+	}
+	return nil
+}
+
+func executableNames(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return nil, fmt.Errorf("der Programmname fehlt")
+	}
+	names := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		name, err := executableName(value)
+		if err != nil {
+			return nil, err
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			return nil, fmt.Errorf("der Programmname %q ist mehrfach vorhanden", name)
+		}
+		seen[key] = true
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 func parseProcessKind(value string) (processKind, error) {

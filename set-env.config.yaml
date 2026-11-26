@@ -3,9 +3,11 @@
 # spalten: Buttons nebeneinander, danach beginnt eine neue Zeile
 # darkmode: true für dunkle Farben, false oder weglassen für hell
 # applikation.aktion: none, kill oder restart
-# applikation.name: Exe-Dateiname, z.B. Client.exe
+# applikation.name: eine Exe oder eine Liste von Exe-Dateien, die beendet werden
 # applikation.startbefehl: Kommandozeile für den Neustart
-# applikation.starten: true startet auch, wenn das Programm nicht läuft
+# applikation.arbeitsverzeichnis: Ordner für den Neustart, vollständiger Pfad
+# applikation.starten: true startet nur, wenn inhibit nicht läuft. Das gilt auch bei restart
+# applikation.inhibit: läuft diese Exe und starten ist true, wird nicht gestartet
 # fatclient: Text des Buttons, der die Variable entfernt
 titel: Arbeitsplatz festlegen
 darkmode: false
@@ -13,10 +15,14 @@ variable: IGELNAME
 spalten: 5
 fatclient: Notebook/Workstation
 applikation:
-  aktion: restart
-  name: PowerShell_ISE.exe
-  startbefehl: 'C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe c:\temp\env.ps1'
+  aktion: kill
+  name: 
+    - cts32.exe
+    - labor32.exe
+  startbefehl: 'C:\Program Files (x86)\Inlog\Synchro\Lance32.exe'
+  arbeitsverzeichnis: 'C:\Program Files (x86)\Inlog\Synchro\'
   starten: true
+  inhibit: appli32.exe
 gruppen:
   - name: Labor
     buttons:

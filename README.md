@@ -8,7 +8,7 @@ Das Programm läuft unter Windows.
 
 ## Nach dem Klonen
 
-Zum Bauen wird [Go](https://go.dev/dl/) gebraucht, Version 1.27.4 oder neuer. Ein C-Compiler ist nicht nötig. Die Datei `rsrc_windows_amd64.syso` bleibt im Ordner. Go bindet sie beim Build ein, damit das Fenster die Windows-Darstellung und die DPI-Einstellung übernimmt.
+Zum Bauen wird [Go](https://go.dev/dl/) gebraucht, Version 1.27.4 oder neuer. Ein C-Compiler ist nicht nötig. Die Datei `rsrc_windows_amd64.syso` bleibt im Ordner. Go bindet sie beim Build ein, damit das Fenster die Windows-Darstellung, die DPI-Einstellung und das Icon übernimmt. Das Icon ist der grüne Kreis in `set-env.ico`.
 
 ```text
 git clone https://github.com/Asperli/set-env.git
@@ -85,24 +85,30 @@ fatclient: Notebook/Workstation
 
 Beim Wechsel des Arbeitsplatzes kann eine Applikation hart beendet oder neu gestartet werden. Die Einstellung gilt für alle Arbeitsplätze. Ein erneuter Klick auf den schon gewählten Wert löst sie nicht aus.
 
-Die Variable wird zuerst geschrieben. Danach werden alle laufenden Prozesse mit diesem Exe-Namen beendet. Ein Neustart erhält die neue Variable direkt. Schlägt Beenden oder Start fehl, bleibt der Arbeitsplatz gesetzt und es erscheint eine Meldung.
+Die Variable wird zuerst geschrieben. `restart` beendet danach die genannten Programme und startet die Befehlszeile, auch wenn `starten` aus ist. Ist `starten` an, gilt zusätzlich `inhibit`: läuft diese Exe, unterbleibt der Start, auch bei `restart`. Die genannten Programme werden trotzdem beendet. Schlägt Beenden oder Start fehl, bleibt der Arbeitsplatz gesetzt und es erscheint eine Meldung.
 
 ```yaml
 applikation:
   aktion: restart
-  name: Client.exe
+  name:
+    - Client.exe
+    - Helper.exe
   startbefehl: '"C:\Program Files\Client\Client.exe"'
+  arbeitsverzeichnis: 'C:\Program Files\Client'
   starten: true
+  inhibit: appli32.exe
 ```
 
 | Feld | Bedeutung |
 | --- | --- |
-| `aktion` | `none`, `kill` oder `restart`. Ohne `applikation` oder mit `none` passiert nichts. |
-| `name` | Dateiname der Exe, zum Beispiel `Client.exe`. Verglichen wird nur der Dateiname, ohne Pfad. |
-| `startbefehl` | Kommandozeile für den Neustart, inklusive Pfad und Argumenten. Pflicht bei `restart`. |
-| `starten` | `true` startet diese Kommandozeile auch dann, wenn das Programm gerade nicht läuft. Ohne Angabe oder mit `false` wird nur neu gestartet, wenn es vorher lief. |
+| `aktion` | `none`, `kill` oder `restart`. `restart` beendet die genannten Programme und startet die Befehlszeile, auch wenn `starten` aus ist. |
+| `name` | Eine Exe oder eine Liste von Exe-Dateien, die beendet werden. Verglichen wird nur der Dateiname, ohne Pfad. |
+| `startbefehl` | Eine Kommandozeile für den Neustart, inklusive Pfad und Argumenten. Pflicht bei `restart`. |
+| `arbeitsverzeichnis` | Ordner, in dem der Neustart läuft. Vollständiger Pfad. Ohne Angabe wird der Ordner der gestarteten Exe verwendet. |
+| `starten` | `true` startet die Befehlszeile nur, wenn `inhibit` nicht läuft. Das gilt auch bei `restart`, `kill` oder ohne Aktion. |
+| `inhibit` | Exe-Dateiname. Wirkt nur, wenn `starten` an ist. Läuft dieses Programm, unterbleibt der Start. |
 
-Bei `kill` wird `startbefehl` nicht verwendet. `starten` gilt nur für `restart`.
+Bei `kill` ohne `starten` wird nur beendet. Ist `starten` aus, ignoriert `restart` den Eintrag `inhibit`.
 
 ## Gruppen ein- und ausblenden
 

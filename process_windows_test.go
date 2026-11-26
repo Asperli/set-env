@@ -16,7 +16,7 @@ func TestProcessActionNoneAndMissingProcess(t *testing.T) {
 	if err := applyProcessAction(appConfig{}, "Igel1"); err != nil {
 		t.Fatal(err)
 	}
-	cfg := appConfig{Process: processAction{Kind: processKill, Executable: "set-env-missing-probe.exe"}}
+	cfg := appConfig{Process: processAction{Kind: processKill, Executables: []string{"set-env-missing-probe.exe"}}}
 	if err := applyProcessAction(cfg, "Igel1"); err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestKillProbeProcess(t *testing.T) {
 	probe, cleanup := startProbe(t, "/c", "ping", "-n", "30", "127.0.0.1")
 	defer cleanup()
 
-	cfg := appConfig{Process: processAction{Kind: processKill, Executable: filepath.Base(probe)}}
+	cfg := appConfig{Process: processAction{Kind: processKill, Executables: []string{filepath.Base(probe)}}}
 	if err := applyProcessAction(cfg, "Igel1"); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestRestartPassesVariableWhenNotRunning(t *testing.T) {
 		Variable: "SET_ENV_PROBE_VAR",
 		Process: processAction{
 			Kind:           processRestart,
-			Executable:     filepath.Base(probe),
+			Executables:    []string{filepath.Base(probe)},
 			CommandLine:    command,
 			StartIfMissing: true,
 		},
@@ -72,16 +72,56 @@ func TestRestartPassesVariableWhenNotRunning(t *testing.T) {
 	}
 }
 
-func TestRestartSkipsWhenNotRunning(t *testing.T) {
+func TestRestartUsesConfiguredWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
+	work := filepath.Join(dir, "arbeit")
+	if err := os.Mkdir(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	probe := copyProbeExecutable(t, dir)
-	marker := filepath.Join(dir, "gestartet.txt")
+	out := filepath.Join(dir, "cwd.txt")
 	cfg := appConfig{
 		Variable: "SET_ENV_PROBE_VAR",
 		Process: processAction{
-			Kind:        processRestart,
-			Executable:  filepath.Base(probe),
-			CommandLine: fmt.Sprintf("%s /c echo nein> %s", quoteCommand(probe), quoteCommand(marker)),
+			Kind:             processRestart,
+			Executables:      []string{filepath.Base(probe)},
+			CommandLine:      fmt.Sprintf("%s /c cd > %s", quoteCommand(probe), quoteCommand(out)),
+			WorkingDirectory: work,
+			StartIfMissing:   true,
+		},
+	}
+	if err := applyProcessAction(cfg, "Igel1"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var text string
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(out)
+		if err == nil {
+			text = strings.TrimSpace(string(data))
+			if text != "" {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !strings.EqualFold(text, work) {
+		t.Fatalf("workdir = %q, want %q", text, work)
+	}
+}
+
+func TestInhibitRunningSkipsStart(t *testing.T) {
+	probe, cleanup := startProbe(t, "/c", "ping", "-n", "30", "127.0.0.1")
+	defer cleanup()
+	marker := filepath.Join(filepath.Dir(probe), "gestartet.txt")
+	cfg := appConfig{
+		Variable: "SET_ENV_PROBE_VAR",
+		Process: processAction{
+			Kind:           processKill,
+			Executables:    []string{"set-env-missing-probe.exe"},
+			CommandLine:    fmt.Sprintf("%s /c echo ja> %s", quoteCommand(probe), quoteCommand(marker)),
+			Inhibit:        filepath.Base(probe),
+			StartIfMissing: true,
 		},
 	}
 	if err := applyProcessAction(cfg, "Igel1"); err != nil {
@@ -89,8 +129,56 @@ func TestRestartSkipsWhenNotRunning(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatal("command started although the program was not running")
+		t.Fatal("command started although the inhibit program was running")
 	}
+}
+
+func TestRestartWithStartenRespectsInhibit(t *testing.T) {
+	probe, cleanup := startProbe(t, "/c", "ping", "-n", "30", "127.0.0.1")
+	defer cleanup()
+	marker := filepath.Join(filepath.Dir(probe), "gestartet.txt")
+	cfg := appConfig{
+		Variable: "SET_ENV_PROBE_VAR",
+		Process: processAction{
+			Kind:           processRestart,
+			Executables:    []string{"set-env-missing-probe.exe"},
+			CommandLine:    fmt.Sprintf("%s /c echo ja> %s", quoteCommand(probe), quoteCommand(marker)),
+			Inhibit:        filepath.Base(probe),
+			StartIfMissing: true,
+		},
+	}
+	if err := applyProcessAction(cfg, "Igel1"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("restart started although starten was on and the inhibit program was running")
+	}
+}
+
+func TestRestartStartsEvenWhenNothingWasRunning(t *testing.T) {
+	dir := t.TempDir()
+	probe := copyProbeExecutable(t, dir)
+	marker := filepath.Join(dir, "gestartet.txt")
+	cfg := appConfig{
+		Variable: "SET_ENV_PROBE_VAR",
+		Process: processAction{
+			Kind:        processRestart,
+			Executables: []string{filepath.Base(probe)},
+			CommandLine: fmt.Sprintf("%s /c echo nein> %s", quoteCommand(probe), quoteCommand(marker)),
+		},
+	}
+	if err := applyProcessAction(cfg, "Igel1"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(marker); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("restart did not start the command")
 }
 
 func TestEnvironmentBlockOmitsClearedVariable(t *testing.T) {

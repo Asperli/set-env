@@ -56,6 +56,7 @@ var (
 	procMessageBox           = user32.NewProc("MessageBoxW")
 	procLoadCursor           = user32.NewProc("LoadCursorW")
 	procLoadIcon             = user32.NewProc("LoadIconW")
+	procLoadImage            = user32.NewProc("LoadImageW")
 	procSetCursor            = user32.NewProc("SetCursor")
 	procMoveWindow           = user32.NewProc("MoveWindow")
 	procEnableWindow         = user32.NewProc("EnableWindow")
@@ -281,6 +282,22 @@ func solidBrush(r, g, b byte) uintptr {
 	return brush
 }
 
+func systemMetric(index uintptr, fallback int) int {
+	value, _, _ := procGetSystemMetrics.Call(index)
+	if value == 0 {
+		return fallback
+	}
+	return int(value)
+}
+
+func loadAppIcon(size int) uintptr {
+	icon, _, _ := procLoadImage.Call(moduleHandle(), 1, 1, uintptr(size), uintptr(size), 0x8000)
+	if icon == 0 {
+		icon, _, _ = procLoadIcon.Call(0, 32512)
+	}
+	return icon
+}
+
 func moduleHandle() uintptr {
 	handle, _, _ := procGetModuleHandle.Call(0)
 	return handle
@@ -288,16 +305,15 @@ func moduleHandle() uintptr {
 
 func registerWindowClass(background uintptr) error {
 	cursor, _, _ := procLoadCursor.Call(0, 32512)
-	icon, _, _ := procLoadIcon.Call(0, 32512)
 	class := wndClassEx{
 		Style:      0x0003,
 		WndProc:    mainProc,
 		Instance:   moduleHandle(),
-		Icon:       icon,
+		Icon:       loadAppIcon(systemMetric(11, 32)),
 		Cursor:     cursor,
 		Background: background,
 		ClassName:  windowClass,
-		IconSm:     icon,
+		IconSm:     loadAppIcon(systemMetric(49, 16)),
 	}
 	class.Size = uint32(unsafe.Sizeof(class))
 	atom, _, _ := procRegisterClassEx.Call(uintptr(unsafe.Pointer(&class)))

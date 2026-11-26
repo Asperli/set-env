@@ -30,11 +30,17 @@ func TestLoadConfigFromProjectFile(t *testing.T) {
 	if cfg.Groups[1].Name != "Büro" || len(cfg.Groups[1].Buttons) == 0 {
 		t.Fatalf("buero = %+v", cfg.Groups[1])
 	}
-	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "PowerShell_ISE.exe" || !cfg.Process.StartIfMissing {
+	if cfg.Process.Kind != processRestart || len(cfg.Process.Executables) != 2 || cfg.Process.Executables[0] != "cts32.exe" || cfg.Process.Executables[1] != "labor32.exe" || !cfg.Process.StartIfMissing {
 		t.Fatalf("process = %+v", cfg.Process)
 	}
-	if cfg.Process.CommandLine != `C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe c:\temp\env.ps1` {
+	if cfg.Process.CommandLine != `C:\Program Files (x86)\Inlog\Synchro\Lance32.exe` {
 		t.Fatalf("command = %q", cfg.Process.CommandLine)
+	}
+	if cfg.Process.WorkingDirectory != `C:\Program Files (x86)\Inlog\Synchro` {
+		t.Fatalf("workdir = %q", cfg.Process.WorkingDirectory)
+	}
+	if cfg.Process.Inhibit != "appli32.exe" {
+		t.Fatalf("inhibit = %q", cfg.Process.Inhibit)
 	}
 	if cfg.ClearLabel != "Notebook/Workstation" {
 		t.Fatalf("clear = %q", cfg.ClearLabel)
@@ -194,11 +200,44 @@ func TestProcessActionFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "Client.EXE" || !cfg.Process.StartIfMissing {
+	if cfg.Process.Kind != processRestart || len(cfg.Process.Executables) != 1 || cfg.Process.Executables[0] != "Client.EXE" || !cfg.Process.StartIfMissing {
 		t.Fatalf("process = %+v", cfg.Process)
 	}
 	if cfg.Process.CommandLine != `"C:\Apps\Client.EXE" /neu` {
 		t.Fatalf("command = %q", cfg.Process.CommandLine)
+	}
+	if cfg.Process.WorkingDirectory != "" {
+		t.Fatalf("workdir = %q", cfg.Process.WorkingDirectory)
+	}
+
+	withDir := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: restart\n  name: Client.exe\n  startbefehl: Client.exe\n  arbeitsverzeichnis: 'C:\\Apps\\Client'\n")
+	if err := os.WriteFile(path, withDir, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Process.WorkingDirectory != `C:\Apps\Client` {
+		t.Fatalf("workdir = %q", cfg.Process.WorkingDirectory)
+	}
+	if err := os.WriteFile(path, []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: restart\n  name: Client.exe\n  startbefehl: Client.exe\n  arbeitsverzeichnis: Apps\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfig(path); err == nil {
+		t.Fatal("expected relative working directory to be rejected")
+	}
+
+	listed := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: kill\n  name:\n    - One.exe\n    - 'C:\\Tools\\Two.EXE'\n")
+	if err := os.WriteFile(path, listed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Process.Executables) != 2 || cfg.Process.Executables[0] != "One.exe" || cfg.Process.Executables[1] != "Two.EXE" {
+		t.Fatalf("list = %+v", cfg.Process.Executables)
 	}
 
 	killOnly := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  action: kill\n  executable: tool.exe\n")
@@ -209,7 +248,7 @@ func TestProcessActionFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Process.Kind != processKill || cfg.Process.Executable != "tool.exe" || cfg.Process.StartIfMissing {
+	if cfg.Process.Kind != processKill || len(cfg.Process.Executables) != 1 || cfg.Process.Executables[0] != "tool.exe" || cfg.Process.StartIfMissing {
 		t.Fatalf("kill = %+v", cfg.Process)
 	}
 
@@ -217,6 +256,7 @@ func TestProcessActionFromConfig(t *testing.T) {
 		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: stop\n  name: a.exe\n",
 		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: kill\n",
 		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: restart\n  name: a.exe\n",
+		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: kill\n  name:\n    - One.exe\n    - one.EXE\n",
 	} {
 		if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
 			t.Fatal(err)
