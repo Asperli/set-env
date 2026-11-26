@@ -607,6 +607,7 @@ func (s *windowState) onCommand(wParam uintptr) {
 	}
 	switch item.kind {
 	case "button":
+		changed := item.value != s.current
 		if err := setUserEnv(s.cfg.Variable, item.value); err != nil {
 			showError(s.hwnd, s.cfg.Title, err.Error())
 			return
@@ -618,6 +619,12 @@ func (s *windowState) onCommand(wParam uintptr) {
 			}
 			s.controls[i].selected = s.controls[i].value == item.value
 			procInvalidateRect.Call(s.controls[i].hwnd, 0, 1)
+		}
+		if !changed {
+			return
+		}
+		if err := applyProcessAction(s.cfg, item.value); err != nil {
+			showError(s.hwnd, s.cfg.Title, "Der Arbeitsplatz wurde gesetzt.\n\n"+err.Error())
 		}
 	case "check":
 		s.hidden[item.group] = true

@@ -30,6 +30,12 @@ func TestLoadConfigFromProjectFile(t *testing.T) {
 	if cfg.Groups[1].Name != "Büro" || len(cfg.Groups[1].Buttons) == 0 {
 		t.Fatalf("buero = %+v", cfg.Groups[1])
 	}
+	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "PowerShell_ISE.exe" || cfg.Process.StartIfMissing {
+		t.Fatalf("process = %+v", cfg.Process)
+	}
+	if cfg.Process.CommandLine != `C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe` {
+		t.Fatalf("command = %q", cfg.Process.CommandLine)
+	}
 }
 
 func TestLoadConfigAcceptsAliasesAndRejectsBadVariable(t *testing.T) {
@@ -144,6 +150,50 @@ func TestColumnsFromConfig(t *testing.T) {
 	}
 	if buttonRows(7, cfg.Columns) != 3 {
 		t.Fatalf("rows = %d", buttonRows(7, cfg.Columns))
+	}
+}
+
+func TestProcessActionFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "set-env.config.yaml")
+	content := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: restart\n  name: 'C:\\Apps\\Client.EXE'\n  startbefehl: '\"C:\\Apps\\Client.EXE\" /neu'\n  starten: true\n")
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Process.Kind != processRestart || cfg.Process.Executable != "Client.EXE" || !cfg.Process.StartIfMissing {
+		t.Fatalf("process = %+v", cfg.Process)
+	}
+	if cfg.Process.CommandLine != `"C:\Apps\Client.EXE" /neu` {
+		t.Fatalf("command = %q", cfg.Process.CommandLine)
+	}
+
+	killOnly := []byte("buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  action: kill\n  executable: tool.exe\n")
+	if err := os.WriteFile(path, killOnly, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Process.Kind != processKill || cfg.Process.Executable != "tool.exe" || cfg.Process.StartIfMissing {
+		t.Fatalf("kill = %+v", cfg.Process)
+	}
+
+	for _, bad := range []string{
+		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: stop\n  name: a.exe\n",
+		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: kill\n",
+		"buttons:\n  - anzeigename: A\n    wert: \"1\"\napplikation:\n  aktion: restart\n  name: a.exe\n",
+	} {
+		if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadConfig(path); err == nil {
+			t.Fatalf("expected error for %q", bad)
+		}
 	}
 }
 

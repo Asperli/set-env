@@ -71,6 +71,29 @@ buttons:
 
 Nach einer Änderung an der Konfiguration das Fenster neu öffnen.
 
+## Applikation beim Wechsel
+
+Beim Wechsel des Arbeitsplatzes kann eine Applikation hart beendet oder neu gestartet werden. Die Einstellung gilt für alle Arbeitsplätze. Ein erneuter Klick auf den schon gewählten Wert löst sie nicht aus.
+
+Die Variable wird zuerst geschrieben. Danach werden alle laufenden Prozesse mit diesem Exe-Namen beendet. Ein Neustart erhält die neue Variable direkt. Schlägt Beenden oder Start fehl, bleibt der Arbeitsplatz gesetzt und es erscheint eine Meldung.
+
+```yaml
+applikation:
+  aktion: restart
+  name: Client.exe
+  startbefehl: '"C:\Program Files\Client\Client.exe"'
+  starten: true
+```
+
+| Feld | Bedeutung |
+| --- | --- |
+| `aktion` | `none`, `kill` oder `restart`. Ohne `applikation` oder mit `none` passiert nichts. |
+| `name` | Dateiname der Exe, zum Beispiel `Client.exe`. Verglichen wird nur der Dateiname, ohne Pfad. |
+| `startbefehl` | Kommandozeile für den Neustart, inklusive Pfad und Argumenten. Pflicht bei `restart`. |
+| `starten` | `true` startet diese Kommandozeile auch dann, wenn das Programm gerade nicht läuft. Ohne Angabe oder mit `false` wird nur neu gestartet, wenn es vorher lief. |
+
+Bei `kill` wird `startbefehl` nicht verwendet. `starten` gilt nur für `restart`.
+
 ## Gruppen ein- und ausblenden
 
 Neben jeder Gruppe steht die Checkbox **ausblenden**. Ein Haken blendet diese Gruppe sofort aus und merkt sich das für den nächsten Start.

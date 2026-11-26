@@ -23,12 +23,28 @@ type groupDef struct {
 	Buttons []buttonDef
 }
 
+type processKind int
+
+const (
+	processNone processKind = iota
+	processKill
+	processRestart
+)
+
+type processAction struct {
+	Kind           processKind
+	Executable     string
+	CommandLine    string
+	StartIfMissing bool
+}
+
 type appConfig struct {
 	Title    string
 	Variable string
 	Columns  int
 	Dark     bool
 	Groups   []groupDef
+	Process  processAction
 }
 
 func (c appConfig) hasNamedGroups() bool {
@@ -41,21 +57,38 @@ func (c appConfig) hasNamedGroups() bool {
 }
 
 type rawConfig struct {
-	Titel         string      `yaml:"titel"`
-	Title         string      `yaml:"title"`
-	Fenstertitel  string      `yaml:"fenstertitel"`
-	Variable      string      `yaml:"variable"`
-	Variablenname string      `yaml:"variablenname"`
-	Variabel      string      `yaml:"variabel"`
-	Spalten       *int        `yaml:"spalten"`
-	Columns       *int        `yaml:"columns"`
-	DarkMode      bool        `yaml:"darkmode"`
-	Buttons       []rawButton `yaml:"buttons"`
-	Eintraege     []rawButton `yaml:"eintraege"`
-	EintraegeUml  []rawButton `yaml:"einträge"`
-	Entries       []rawButton `yaml:"entries"`
-	Gruppen       []rawGroup  `yaml:"gruppen"`
-	Groups        []rawGroup  `yaml:"groups"`
+	Titel         string       `yaml:"titel"`
+	Title         string       `yaml:"title"`
+	Fenstertitel  string       `yaml:"fenstertitel"`
+	Variable      string       `yaml:"variable"`
+	Variablenname string       `yaml:"variablenname"`
+	Variabel      string       `yaml:"variabel"`
+	Spalten       *int         `yaml:"spalten"`
+	Columns       *int         `yaml:"columns"`
+	DarkMode      bool         `yaml:"darkmode"`
+	Buttons       []rawButton  `yaml:"buttons"`
+	Eintraege     []rawButton  `yaml:"eintraege"`
+	EintraegeUml  []rawButton  `yaml:"einträge"`
+	Entries       []rawButton  `yaml:"entries"`
+	Gruppen       []rawGroup   `yaml:"gruppen"`
+	Groups        []rawGroup   `yaml:"groups"`
+	Applikation   rawAppAction `yaml:"applikation"`
+	Application   rawAppAction `yaml:"application"`
+}
+
+type rawAppAction struct {
+	Aktion      string `yaml:"aktion"`
+	Action      string `yaml:"action"`
+	Name        string `yaml:"name"`
+	Programm    string `yaml:"programm"`
+	Program     string `yaml:"program"`
+	Executable  string `yaml:"executable"`
+	Startbefehl string `yaml:"startbefehl"`
+	Kommando    string `yaml:"kommando"`
+	Command     string `yaml:"command"`
+	CommandLine string `yaml:"commandline"`
+	Starten     *bool  `yaml:"starten"`
+	StartIfMiss *bool  `yaml:"startifmissing"`
 }
 
 type rawGroup struct {
@@ -140,7 +173,11 @@ func loadConfig(path string) (appConfig, error) {
 	if err != nil {
 		return appConfig{}, err
 	}
-	return appConfig{Title: title, Variable: variable, Columns: columns, Dark: raw.DarkMode, Groups: groups}, nil
+	process, err := processFromRaw(raw)
+	if err != nil {
+		return appConfig{}, err
+	}
+	return appConfig{Title: title, Variable: variable, Columns: columns, Dark: raw.DarkMode, Groups: groups, Process: process}, nil
 }
 
 func titleFromRaw(raw rawConfig) (string, error) {
@@ -247,6 +284,78 @@ func parseButtons(group string, source []rawButton) ([]buttonDef, error) {
 		buttons = append(buttons, buttonDef{Anzeigename: name, Wert: value})
 	}
 	return buttons, nil
+}
+
+func processFromRaw(raw rawConfig) (processAction, error) {
+	chosen := raw.Applikation
+	if rawAppActionEmpty(chosen) {
+		chosen = raw.Application
+	}
+	if rawAppActionEmpty(chosen) {
+		return processAction{}, nil
+	}
+
+	kind, err := parseProcessKind(firstText(chosen.Aktion, chosen.Action))
+	if err != nil {
+		return processAction{}, err
+	}
+	if kind == processNone {
+		return processAction{}, nil
+	}
+
+	executable, err := executableName(firstText(chosen.Name, chosen.Programm, chosen.Program, chosen.Executable))
+	if err != nil {
+		return processAction{}, err
+	}
+	command := firstText(chosen.Startbefehl, chosen.Kommando, chosen.Command, chosen.CommandLine)
+	if kind == processRestart {
+		if command == "" {
+			return processAction{}, fmt.Errorf("für einen Neustart fehlt der Startbefehl")
+		}
+		if strings.ContainsAny(command, "\r\n\x00") {
+			return processAction{}, fmt.Errorf("der Startbefehl darf keine Zeilenumbrüche enthalten")
+		}
+		if len(command) > 32767 {
+			return processAction{}, fmt.Errorf("der Startbefehl ist länger als 32767 Zeichen")
+		}
+	}
+
+	startIfMissing := false
+	if chosen.Starten != nil {
+		startIfMissing = *chosen.Starten
+	} else if chosen.StartIfMiss != nil {
+		startIfMissing = *chosen.StartIfMiss
+	}
+	return processAction{Kind: kind, Executable: executable, CommandLine: command, StartIfMissing: startIfMissing}, nil
+}
+
+func rawAppActionEmpty(raw rawAppAction) bool {
+	return firstText(raw.Aktion, raw.Action, raw.Name, raw.Programm, raw.Program, raw.Executable, raw.Startbefehl, raw.Kommando, raw.Command, raw.CommandLine) == "" && raw.Starten == nil && raw.StartIfMiss == nil
+}
+
+func parseProcessKind(value string) (processKind, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "none":
+		return processNone, nil
+	case "kill":
+		return processKill, nil
+	case "restart":
+		return processRestart, nil
+	default:
+		return processNone, fmt.Errorf("aktion %q ist ungültig. Erlaubt sind none, kill und restart", value)
+	}
+}
+
+func executableName(value string) (string, error) {
+	value = strings.Trim(strings.TrimSpace(value), `"`)
+	if value == "" {
+		return "", fmt.Errorf("der Programmname fehlt")
+	}
+	name := filepath.Base(value)
+	if name == "." || name == ".." || strings.ContainsAny(name, `\/:*?"<>|`+"\r\n\x00") {
+		return "", fmt.Errorf("der Programmname %q ist ungültig", value)
+	}
+	return name, nil
 }
 
 func firstText(values ...string) string {

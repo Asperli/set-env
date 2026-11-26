@@ -2,10 +2,19 @@
 # variable: Name der Benutzervariable
 # spalten: Buttons nebeneinander, danach beginnt eine neue Zeile
 # darkmode: true für dunkle Farben, false oder weglassen für hell
+# applikation.aktion: none, kill oder restart
+# applikation.name: Exe-Dateiname, z.B. Client.exe
+# applikation.startbefehl: Kommandozeile für den Neustart
+# applikation.starten: true startet auch, wenn das Programm nicht läuft
 titel: Arbeitsplatz festlegen
 darkmode: false
 variable: IGELNAME
 spalten: 5
+applikation:
+  aktion: restart
+  name: PowerShell_ISE.exe
+  startbefehl: 'C:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe'
+  starten: true
 gruppen:
   - name: Labor
     buttons:
